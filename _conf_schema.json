@@ -1,0 +1,12 @@
+{
+  "banshi_group_list": {
+    "type": "list",
+    "default": ["1032915502"],
+    "description": "史的来源群列表"
+  },
+  "banshi_target_list": {
+    "type": "list",
+    "default": [],
+    "description": "白名单, 史的目标列表, 可以填写多个群或用户, 默认空白即全部群"
+  }
+}
