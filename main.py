@@ -36,11 +36,12 @@ class Sowing_Discord(Star):
                     }
                 })
             for target_id in banshi_target_list:
-                await client.api.call_action(
-                "send_forward_msg",
-                group_id=target_id,
-                message=forward_nodes
-            )
+                if target_id not in banshi_group_list:
+                    await client.api.call_action(
+                        "send_forward_msg",
+                        group_id=target_id,
+                        message=forward_nodes
+                    )
 
     async def get_group_list(self, event: AstrMessageEvent):
         client = event.bot
