@@ -35,7 +35,7 @@ class Sowing_Discord(Star):
                         "content": content
                     }
                 })
-            for target_id in banshi_target_list:
+            for target_id in self.banshi_target_list:
                 await client.api.call_action(
                 "send_forward_msg",
                 group_id=target_id,
