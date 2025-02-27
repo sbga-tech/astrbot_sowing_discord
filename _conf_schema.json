@@ -8,5 +8,11 @@
     "type": "list",
     "default": [],
     "description": "白名单, 史的目标列表, 可以填写多个群或用户, 默认空白即全部群"
+  },
+  "block_source_messages": {
+    "description": "是否屏蔽源群消息",
+    "type": "bool",
+    "hint": "开启后将屏蔽banshi_group_list中的群消息",
+    "default": true
   }
 }
