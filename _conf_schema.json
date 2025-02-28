@@ -1,4 +1,9 @@
 {
+  "banshi_interval": {
+    "type": "int",
+    "default": 30,
+    "description": "搬史间隔, 单位: 秒"
+  },
   "banshi_group_list": {
     "type": "list",
     "default": ["1032915502"],
