@@ -14,7 +14,7 @@ class Sowing_Discord(Star):
     @filter.event_message_type(filter.EventMessageType.ALL)
     async def handle_message(self, event:AstrMessageEvent):
         if not self.banshi_target_list:
-            banshi_target_list = await self.get_group_list(event)
+            self.banshi_target_list = await self.get_group_list(event)
         if event.message_obj.raw_message["message"][0]["type"] == "forward" and event.message_obj.group_id in self.banshi_group_list:
             print(event.message_obj.raw_message["message"][0]["type"])
             client = event.bot
