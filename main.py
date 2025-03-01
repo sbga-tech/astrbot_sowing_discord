@@ -28,7 +28,15 @@ class Sowing_Discord(Star):
 
         if not self.banshi_target_list:
             self.banshi_target_list = await self.get_group_list(event)
-        if event.message_obj.raw_message["message"][0]["type"] == "forward" and event.message_obj.group_id in self.banshi_group_list:
+        # 检查是否为转发消息
+        raw_message = event.message_obj.raw_message
+        is_forward = (isinstance(raw_message, dict) and 
+                     isinstance(raw_message.get("message"), list) and 
+                     raw_message["message"] and
+                     isinstance(raw_message["message"][0], dict) and
+                     raw_message["message"][0].get("type") == "forward")
+        
+        if is_forward and event.message_obj.group_id in self.banshi_group_list:
             # 缓存消息进入本地
             await self.local_cache.add_cache(msg_id)
         # 检查本地中是否存在等待转发的消息
