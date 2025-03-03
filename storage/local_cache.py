@@ -7,6 +7,9 @@ import time
 class LocalCache:
     def __init__(self):
         self.cache_file = os.path.join(TEMP_DIR, "local_cache.json")
+        cache_dir = os.path.dirname(self.cache_file)
+        os.makedirs(cache_dir, exist_ok=True)
+        
         if not os.path.exists(self.cache_file):
             with open(self.cache_file, "w") as f:
                 json.dump({}, f)
