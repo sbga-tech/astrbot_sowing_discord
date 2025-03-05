@@ -2,6 +2,7 @@ from astrbot.api.event import filter, AstrMessageEvent, MessageEventResult
 from astrbot.api.star import Context, Star, register
 from astrbot.api.all import *
 from astrbot.core.platform.sources.aiocqhttp.aiocqhttp_message_event import AiocqhttpMessageEvent
+from astrbot.core.star.filter.platform_adapter_type import PlatformAdapterType
 from .core.forward_manager import ForwardManager
 from .core.message_handler import MessageHandler
 from .core.evaluation.evaluator import Evaluator
@@ -19,7 +20,7 @@ class Sowing_Discord(Star):
         self.block_source_messages = config.get("block_source_messages", False)
         self.local_cache = LocalCache()
 
-    @filter.event_message_type(filter.EventMessageType.ALL)
+    @filter.platform_adapter_type(PlatformAdapterType.AIOCQHTTP)
     async def handle_message(self, event:AstrMessageEvent):
         forward_manager = ForwardManager(event)
         evaluator = Evaluator(event)
