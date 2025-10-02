@@ -7,6 +7,7 @@ import time
 class LocalCache:
     def __init__(self):
         self.cache_file = os.path.join(TEMP_DIR, "local_cache.json")
+        self.WAITING_TIME = WAITING_TIME
         cache_dir = os.path.dirname(self.cache_file)
         os.makedirs(cache_dir, exist_ok=True)
         
@@ -16,9 +17,13 @@ class LocalCache:
 
     async def add_cache(self, message_id: int):
         """添加一条message_id进入缓存, 保存时间"""
+        str_message_id = str(message_id)
         with open(self.cache_file, "r") as f:
             cache = json.load(f)
-        cache[message_id] = time.time()
+        
+        # 键必须是字符串，因为JSON不允许整数作为键
+        cache[str_message_id] = time.time()
+        
         with open(self.cache_file, "w") as f:
             json.dump(cache, f)
     
@@ -30,15 +35,24 @@ class LocalCache:
         to_delete = []
         waiting_messages = []
         
-        for message_id, timestamp in cache.items():
-            if time.time() - timestamp > WAITING_TIME:
-                waiting_messages.append(message_id)
-                to_delete.append(message_id)
+        for message_id_str, timestamp in cache.items():
+            # 检查消息是否已经等待了足够长的时间
+            if time.time() - timestamp > self.WAITING_TIME:
+                # 返回时将消息ID从字符串转回整数
+                waiting_messages.append(int(message_id_str))
         
-        for message_id in to_delete:
-            del cache[message_id]
-            
-        with open(self.cache_file, "w") as f:
-            json.dump(cache, f)
-            
+        # 【关键修改】移除删除逻辑
         return waiting_messages
+        
+    async def remove_cache(self, message_id: int):
+        """【新增】转发成功或失败后，手动删除指定的 message_id"""
+        str_message_id = str(message_id)
+        with open(self.cache_file, "r") as f:
+            cache = json.load(f)
+            
+        if str_message_id in cache:
+            del cache[str_message_id]
+            with open(self.cache_file, "w") as f:
+                json.dump(cache, f)
+            return True
+        return False
