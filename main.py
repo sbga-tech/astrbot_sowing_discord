@@ -5,9 +5,7 @@ from astrbot.api import logger
 from aiocqhttp.exceptions import ActionFailed
 from astrbot.core.platform.sources.aiocqhttp.aiocqhttp_message_event import AiocqhttpMessageEvent
 from astrbot.core.star.filter.platform_adapter_type import PlatformAdapterType
-# 假设以下依赖都在同一目录的 .core 和 .storage 中
 from .core.forward_manager import ForwardManager
-# from .core.message_handler import MessageHandler # 未使用，可移除
 from .core.evaluation.evaluator import Evaluator
 from .core.evaluation.rules import GoodEmojiRule
 from .storage.local_cache import LocalCache
@@ -48,6 +46,12 @@ class Sowing_Discord(Star):
         logger.info(
             f"[SowingDiscord][ID:{self.instance_id}] 接收到消息事件，来源群ID: {source_group_id}。"
         )
+        
+        if not is_in_source_list:
+            logger.info(
+                f"[SowingDiscord][ID:{self.instance_id}] 来源群 {source_group_id} 不在白名单内，跳过全部处理。"
+            )
+            return None # 返回 None 确保事件继续传递给其他插件
 
         # 1. 确保目标群列表已加载
         if not self.banshi_target_list:
@@ -63,18 +67,19 @@ class Sowing_Discord(Star):
                     message_list[0].get("type") == "forward")
         
         # 3. 缓存逻辑：仅对来自白名单的转发消息进行缓存。
-        #    移除普通消息的提前退出逻辑，确保后续的转发检查能被执行。
-        if is_forward and is_in_source_list:
+        #    注意：is_in_source_list 在这里总是 True，因为上面已经排除了 False 的情况。
+        if is_forward:
             await self.local_cache.add_cache(msg_id)
             logger.info(
                 f"[SowingDiscord][ID:{self.instance_id}] 任务：缓存。已缓存转发消息 (ID: {msg_id})。"
             )
         else:
              logger.info(
-                f"[SowingDiscord][ID:{self.instance_id}] 任务：跳过缓存。当前消息 (ID: {msg_id}) 不满足缓存条件 (is_forward: {is_forward}, in_list: {is_in_source_list})."
+                f"[SowingDiscord][ID:{self.instance_id}] 任务：跳过缓存。当前消息 (ID: {msg_id}) 不是转发消息。"
             )
 
-        # 4. 检查和转发等待超时的消息 (所有事件都会触发此检查)
+        # 4. 检查和转发等待超时的消息 (只有来自白名单的群聊事件才会触发此检查)
+        #    get_waiting_messages会自动清理过期缓存
         waiting_messages = await self.local_cache.get_waiting_messages()
         
         # 转发/冷却逻辑
@@ -83,7 +88,6 @@ class Sowing_Discord(Star):
                 logger.warning(
                     f"[SowingDiscord][ID:{self.instance_id}] 任务：跳过转发。检测到 {len(waiting_messages)} 条待转发消息，但转发锁被占用。"
                 )
-                # 不返回，继续执行最后的阻止逻辑
             else:
                 async with self.forward_lock:
                     logger.info(
@@ -150,7 +154,8 @@ class Sowing_Discord(Star):
                 logger.info(f"[SowingDiscord][ID:{self.instance_id}] 本次所有待转发消息处理完毕，释放转发锁。")
             
         # 5. 最终阻止/放行逻辑
-        if self.block_source_messages and is_in_source_list and is_forward:
+        # 注意：is_in_source_list 在这里总是 True
+        if self.block_source_messages and is_forward:
             # 只有当消息是来自白名单的转发消息，且设置了阻止时，才终止事件
             logger.info(
                 f"[SowingDiscord][ID:{self.instance_id}] 任务：阻止。阻止来源群 {source_group_id} 的原始转发消息显示。"
