@@ -30,7 +30,6 @@ class LocalCache:
         keys_to_delete = []
         
         for message_id_str, timestamp in cache.items():
-            # 检查是否超过最大缓存年龄
             if current_time - timestamp > self.MAX_CACHE_AGE_SECONDS:
                 keys_to_delete.append(message_id_str)
         
