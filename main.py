@@ -31,12 +31,12 @@ class Sowing_Discord(Star):
         
         self._forward_task = None 
 
-        logger.info("=" * 60)
-        logger.info(f"[SowingDiscord] 插件版本 1.0.0 已载入。实例ID: {self.instance_id}")
-        logger.info(f"[SowingDiscord] 配置: banshi_interval (冷却时间): {self.banshi_interval} 秒")
-        logger.info(f"[SowingDiscord] 配置: banshi_group_list (来源白名单): {self.banshi_group_list}")
-        logger.info(f"[SowingDiscord] 配置: banshi_target_list (目标群列表): {self.banshi_target_list}")
-        logger.info("=" * 60)
+        # logger.info("=" * 60)
+        # logger.info(f"[SowingDiscord] 插件版本 1.0.0 已载入。实例ID: {self.instance_id}")
+        # logger.info(f"[SowingDiscord] 配置: banshi_interval (冷却时间): {self.banshi_interval} 秒")
+        # logger.info(f"[SowingDiscord] 配置: banshi_group_list (来源白名单): {self.banshi_group_list}")
+        # logger.info(f"[SowingDiscord] 配置: banshi_target_list (目标群列表): {self.banshi_target_list}")
+        # logger.info("=" * 60)
 
     async def terminate(self):
         if self._forward_task and not self._forward_task.done():
@@ -88,9 +88,10 @@ class Sowing_Discord(Star):
         # 转发/冷却逻辑
         if waiting_messages:
             if self.forward_lock.locked():
-                logger.warning(
-                    f"[SowingDiscord][ID:{self.instance_id}] 任务：跳过转发。检测到 {len(waiting_messages)} 条待转发消息，但转发锁被占用。"
-                )
+                # logger.warning(
+                #     f"[SowingDiscord][ID:{self.instance_id}] 任务：跳过转发。检测到 {len(waiting_messages)} 条待转发消息，但转发锁被占用。"
+                # )
+                pass
             else:
                 self._forward_task = asyncio.create_task(
                     self._execute_forward_and_cool(event, forward_manager, evaluator, waiting_messages)
