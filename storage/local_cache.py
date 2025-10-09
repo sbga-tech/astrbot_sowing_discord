@@ -6,11 +6,10 @@ import time
 from astrbot.api import logger 
 
 class LocalCache:
-    MAX_CACHE_AGE_SECONDS = 4 * 60 * 60 # 4 小时
-
-    def __init__(self):
+    def __init__(self, max_age_seconds: int = 3600):
         self.cache_file = os.path.join(TEMP_DIR, "local_cache.json")
         self.WAITING_TIME = WAITING_TIME 
+        self.MAX_CACHE_AGE_SECONDS = max_age_seconds
         cache_dir = os.path.dirname(self.cache_file)
         os.makedirs(cache_dir, exist_ok=True)
         
