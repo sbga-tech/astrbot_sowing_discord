@@ -1,15 +1,20 @@
-# 本地持久化缓存聊天记录id, 缓存后10分钟后查询是否满足条件, 满足条件后转发并删除缓存
+# local_cache.py
+
 from ..config import TEMP_DIR, WAITING_TIME
 import os
 import json
 import time
+import asyncio 
 from astrbot.api import logger 
 
 class LocalCache:
     def __init__(self, max_age_seconds: int = 3600):
         self.cache_file = os.path.join(TEMP_DIR, "local_cache.json")
-        self.WAITING_TIME = WAITING_TIME 
+        self.WAITING_TIME = WAITING_TIME
         self.MAX_CACHE_AGE_SECONDS = max_age_seconds
+        
+        self._file_lock = asyncio.Lock() 
+        
         cache_dir = os.path.dirname(self.cache_file)
         os.makedirs(cache_dir, exist_ok=True)
         
@@ -17,55 +22,61 @@ class LocalCache:
             with open(self.cache_file, "w") as f:
                 json.dump({}, f)
 
-    async def _cleanup_expired_cache(self):
-        """清理缓存中超过 MAX_CACHE_AGE_SECONDS 的消息"""
-        try:
-            with open(self.cache_file, "r") as f:
-                cache = json.load(f)
-        except (FileNotFoundError, json.JSONDecodeError):
-            return 0 # 文件不存在或内容为空，无需清理
-
+    async def _cleanup_expired_cache(self) -> int:
+        """清理缓存中超过 MAX_CACHE_AGE_SECONDS 的消息，并返回清理数量。"""
         current_time = time.time()
-        keys_to_delete = []
+        cleaned_count = 0
         
-        for message_id_str, timestamp in cache.items():
-            if current_time - timestamp > self.MAX_CACHE_AGE_SECONDS:
-                keys_to_delete.append(message_id_str)
-        
-        if keys_to_delete:
-            for key in keys_to_delete:
-                del cache[key]
-            
-            with open(self.cache_file, "w") as f:
-                json.dump(cache, f)
+        async with self._file_lock:
+            try:
+                with open(self.cache_file, "r") as f:
+                    cache = json.load(f)
+                
+            except (FileNotFoundError, json.JSONDecodeError):
+                logger.error("[LocalCache][CLEANUP] 错误：文件不存在或内容格式错误。")
+                return 0 
 
-        return len(keys_to_delete)
+            keys_to_keep = {}
+            for message_id_str, timestamp in cache.items():
+                if current_time - timestamp > self.MAX_CACHE_AGE_SECONDS:
+                    cleaned_count += 1
+                else:
+                    keys_to_keep[message_id_str] = timestamp
+            
+            if cleaned_count > 0:
+                with open(self.cache_file, "w") as f:
+                    json.dump(keys_to_keep, f)
+            
+            return cleaned_count
 
     async def add_cache(self, message_id: int):
         """添加一条message_id进入缓存, 保存时间"""
         str_message_id = str(message_id)
-        with open(self.cache_file, "r") as f:
-            cache = json.load(f)
         
-        cache[str_message_id] = time.time()
-        
-        with open(self.cache_file, "w") as f:
-            json.dump(cache, f)
-    
+        async with self._file_lock:
+            with open(self.cache_file, "r") as f:
+                cache = json.load(f)
+
+            cache[str_message_id] = time.time()
+            
+            with open(self.cache_file, "w") as f:
+                json.dump(cache, f)
+            
     async def get_waiting_messages(self) -> list:
         """获取已经等待足够时间的消息列表，并首先进行过期清理"""
         
-        # 1. 首先执行清理任务
-        cleaned_count = await self._cleanup_expired_cache()
-        if cleaned_count > 0:
-            logger.info(f"[LocalCache] 清理了 {cleaned_count} 条过期缓存消息。")
-        
-        # 2. 获取待转发消息
-        with open(self.cache_file, "r") as f:
-            cache = json.load(f)
+        await self._cleanup_expired_cache()
         
         waiting_messages = []
         current_time = time.time()
+        
+        async with self._file_lock:
+            try:
+                with open(self.cache_file, "r") as f:
+                    cache = json.load(f)
+                
+            except (FileNotFoundError, json.JSONDecodeError):
+                return []
         
         for message_id_str, timestamp in cache.items():
             if current_time - timestamp > self.WAITING_TIME:
@@ -76,12 +87,20 @@ class LocalCache:
     async def remove_cache(self, message_id: int):
         """转发成功或失败后，手动删除指定的 message_id"""
         str_message_id = str(message_id)
-        with open(self.cache_file, "r") as f:
-            cache = json.load(f)
+        
+        async with self._file_lock:
+            try:
+                with open(self.cache_file, "r") as f:
+                    cache = json.load(f)
+        
+            except (FileNotFoundError, json.JSONDecodeError):
+                return False
             
-        if str_message_id in cache:
-            del cache[str_message_id]
-            with open(self.cache_file, "w") as f:
-                json.dump(cache, f)
-            return True
-        return False
+            if str_message_id in cache:
+                del cache[str_message_id]
+                
+                with open(self.cache_file, "w") as f:
+                    json.dump(cache, f)
+                
+                return True
+            return False

@@ -58,7 +58,7 @@ class Sowing_Discord(Star):
         msg_id = event.message_obj.message_id
         is_in_source_list = source_group_id in self.banshi_group_list
         
-        sender_id = event.message_obj.self_id
+        sender_id = event.get_sender_id()
 
         if not self.banshi_target_list:
             self.banshi_target_list = await self.get_group_list(event)
@@ -101,6 +101,8 @@ class Sowing_Discord(Star):
         client = event.bot
         
         try:
+            current_task = asyncio.current_task()
+            
             async with self.forward_lock:
                 logger.info(
                     f"[SowingDiscord][ID:{self.instance_id}] 执行任务：转发。成功获取转发锁。检测到 {len(waiting_messages)} 条待转发消息，开始处理..."
@@ -156,13 +158,14 @@ class Sowing_Discord(Star):
                             await self.local_cache.remove_cache(msg_id_to_forward)
                             logger.info(f"[SowingDiscord][ID:{self.instance_id}] 缓存清理：消息 (ID: {msg_id_to_forward}) 转发成功，已手动清除缓存。")
 
+                            self._forward_task = current_task 
                             logger.info(f"[SowingDiscord][ID:{self.instance_id}] 冷却开始：时长 {self.banshi_interval} 秒 (持有锁)。")
                             await asyncio.sleep(self.banshi_interval)
+                            self._forward_task = None # 冷却完成后清除跟踪
                             
                             end_time = time.time()
                             actual_duration = end_time - start_time_for_cooldown
-                            logger.info(f"[SowingDiscord][ID:{self.instance_id}] 冷却结束：实际耗时约 {actual_duration:.2f} 秒 (包含发送时间)。"
-                            )
+                            logger.info(f"[SowingDiscord][ID:{self.instance_id}] 冷却结束：实际耗时约 {actual_duration:.2f} 秒 (包含发送时间)。")
                             
                         else:
                             logger.info(f"[SowingDiscord][ID:{self.instance_id}] 消息 (ID: {msg_id_to_forward}) 评估未通过，跳过转发。")
@@ -176,13 +179,14 @@ class Sowing_Discord(Star):
                         continue
                     except asyncio.CancelledError:
                          logger.warning(f"[SowingDiscord][ID:{self.instance_id}] 任务在冷却期间被强制取消。")
+                         self._forward_task = None
                          raise
 
             logger.info(f"[SowingDiscord][ID:{self.instance_id}] 本次所有待转发消息处理完毕，释放转发锁。")
         except asyncio.CancelledError:
             logger.warning(f"[SowingDiscord][ID:{self.instance_id}] 转发任务协程被强制终止，确保锁已释放。")
         finally:
-             self._forward_task = None
+             self._forward_task = None 
 
     async def get_group_list(self, event: AstrMessageEvent):
         client = event.bot
@@ -192,4 +196,3 @@ class Sowing_Discord(Star):
             f"[SowingDiscord] 目标群列表为空，自动获取到 {len(group_ids)} 个群组作为目标群。"
         )
         return group_ids
-    
