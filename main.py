@@ -96,7 +96,7 @@ class Sowing_Discord(Star):
         核心转发逻辑，包含对消息内容的预检查（是否被撤回/是否过期）。
         """
         # 1. 计算时间下限
-        earliest_timestamp_limit = event.message_obj.timestamp - self.banshi_cache_seconds
+        earliest_timestamp_limit = time.time() - self.banshi_cache_seconds
         
         client = event.bot
         
