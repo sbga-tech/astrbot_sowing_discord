@@ -13,23 +13,21 @@ import asyncio
 import time
 import uuid 
 
-SHARED_FORWARD_LOCK = asyncio.Lock()
-
-@register("astrbot_sowing_discord", "anka", "anka - 搬史插件", "1.0.0")
+@register("astrbot_sowing_discord", "anka", "anka - 搬史插件", "0.915")
 class Sowing_Discord(Star):
     def __init__(self, context: Context, config: dict = None):
         super().__init__(context)
         self.instance_id = str(uuid.uuid4())[:8] 
         
-        self.banshi_interval = config.get("banshi_interval", 30)
-        self.banshi_cache_seconds = config.get("banshi_cache_seconds", 3600)
+        self.banshi_interval = config.get("banshi_interval", 3600) 
+        self.banshi_cache_seconds = config.get("banshi_cache_seconds", 3600) 
         
         self.banshi_group_list = config.get("banshi_group_list")
         self.banshi_target_list = config.get("banshi_target_list")
         self.block_source_messages = config.get("block_source_messages", False)
         self.local_cache = LocalCache(max_age_seconds=self.banshi_cache_seconds) 
         
-        self.forward_lock = SHARED_FORWARD_LOCK 
+        self.forward_lock = asyncio.Lock()
         self._forward_task = None 
 
     async def terminate(self):
@@ -37,15 +35,14 @@ class Sowing_Discord(Star):
             logger.warning(f"[SowingDiscord][ID:{self.instance_id}] 检测到正在冷却中的转发任务，正在尝试取消...")
             self._forward_task.cancel()
             try:
-                await self._forward_task 
+                await asyncio.wait_for(self._forward_task, timeout=5.0) 
+            except asyncio.TimeoutError:
+                logger.error(f"[SowingDiscord][ID:{self.instance_id}] 冷却任务取消超时。由于未使用全局锁，这不会阻塞其他实例。")
             except asyncio.CancelledError:
                 logger.info(f"[SowingDiscord][ID:{self.instance_id}] 冷却任务已成功取消。")
             except Exception as e:
                 logger.error(f"[SowingDiscord][ID:{self.instance_id}] 取消冷却任务时发生异常: {e}")
 
-        if self.forward_lock.locked():
-             logger.warning(f"[SowingDiscord][ID:{self.instance_id}] 警告：插件已卸载，但共享锁仍被占用。")
-        
         logger.info(f"[SowingDiscord][ID:{self.instance_id}] 插件已卸载/重载。")
         
     @filter.platform_adapter_type(PlatformAdapterType.AIOCQHTTP)
@@ -95,29 +92,34 @@ class Sowing_Discord(Star):
         """
         核心转发逻辑，包含对消息内容的预检查（是否被撤回/是否过期）。
         """
-        # 1. 计算时间下限
-        earliest_timestamp_limit = time.time() - self.banshi_cache_seconds
-        
         client = event.bot
         
         try:
             current_task = asyncio.current_task()
-            
+            cleaned_count = await self.local_cache._cleanup_expired_cache()
+            if cleaned_count > 0:
+                logger.info(f"[SowingDiscord][ID:{self.instance_id}] 转发前自动清理了 {cleaned_count} 条超出最大缓存时长的消息。")
+
+            waiting_messages = await self.local_cache.get_waiting_messages()
+
             async with self.forward_lock:
                 logger.info(
                     f"[SowingDiscord][ID:{self.instance_id}] 执行任务：转发。成功获取转发锁。检测到 {len(waiting_messages)} 条待转发消息，开始处理..."
                 )
                 
                 for index, msg_id_to_forward in enumerate(waiting_messages):
+                    
+                    earliest_timestamp_limit = time.time() - self.banshi_cache_seconds
+                    
                     target_list_str = ', '.join(map(str, self.banshi_target_list))
                     
-                    # === 2. 预检查：是否被撤回或过期 ===
+                    # === 预检查：是否被撤回或过期 ===
                     try:
                         message_detail = await client.api.call_action("get_msg", message_id=int(msg_id_to_forward))
                         message_time = message_detail.get('time', 0)
                         msg_content = message_detail.get('message', [])
                         
-                        # 检查 2.1: 消息时间是否超出缓存范围
+                        # 检查: 消息时间是否超出缓存范围
                         if message_time < earliest_timestamp_limit:
                             logger.info(
                                 f"[SowingDiscord] 预检查失败：消息ID {msg_id_to_forward} (时间: {time.strftime('%H:%M:%S', time.localtime(message_time))}) 已超出 {self.banshi_cache_seconds} 秒缓存限制。"
@@ -125,7 +127,7 @@ class Sowing_Discord(Star):
                             await self.local_cache.remove_cache(msg_id_to_forward)
                             continue 
                         
-                        # 检查 2.2: 消息内容是否被撤回
+                        # 检查: 消息内容是否被撤回
                         if not msg_content:
                              logger.info(
                                 f"[SowingDiscord] 预检查失败：消息ID {msg_id_to_forward} 内容为空或复杂类型，判断为已撤回/失效。"
@@ -140,7 +142,7 @@ class Sowing_Discord(Star):
                         await self.local_cache.remove_cache(msg_id_to_forward)
                         continue 
                         
-                    # === 3. 预检查通过，开始转发流程 ===
+                    # === 预检查通过，开始转发流程 ===
                     start_time_for_cooldown = time.time()
                     try:
                         if await evaluator.evaluate(msg_id_to_forward):

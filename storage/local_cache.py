@@ -54,8 +54,11 @@ class LocalCache:
         str_message_id = str(message_id)
         
         async with self._file_lock:
-            with open(self.cache_file, "r") as f:
-                cache = json.load(f)
+            try:
+                with open(self.cache_file, "r") as f:
+                    cache = json.load(f)
+            except (FileNotFoundError, json.JSONDecodeError):
+                 cache = {}
 
             cache[str_message_id] = time.time()
             
@@ -63,9 +66,7 @@ class LocalCache:
                 json.dump(cache, f)
             
     async def get_waiting_messages(self) -> list:
-        """获取已经等待足够时间的消息列表，并首先进行过期清理"""
-        
-        await self._cleanup_expired_cache()
+        """获取已经等待足够时间的消息列表"""
         
         waiting_messages = []
         current_time = time.time()
