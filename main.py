@@ -26,6 +26,12 @@ class Sowing_Discord(Star):
         # 动态冷却配置（可自定义），默认：白天600s，夜间3600s
         self.cooldown_day_seconds = config.get("banshi_cooldown_day_seconds", 600)
         self.cooldown_night_seconds = config.get("banshi_cooldown_night_seconds", 3600)
+        # 冷却时间段起始时间（可自定义），默认：白天09:00，夜间01:00
+        self.cooldown_day_start_str = config.get("banshi_cooldown_day_start", "09:00")
+        self.cooldown_night_start_str = config.get("banshi_cooldown_night_start", "01:00")
+        # 解析为 time 对象
+        self._day_start = self._parse_time_str(self.cooldown_day_start_str, dtime(9, 0))
+        self._night_start = self._parse_time_str(self.cooldown_night_start_str, dtime(1, 0))
         
         self.banshi_group_list = config.get("banshi_group_list")
         self.banshi_target_list = config.get("banshi_target_list")
@@ -35,15 +41,28 @@ class Sowing_Discord(Star):
         self.forward_lock = asyncio.Lock()
         self._forward_task = None 
 
+    def _parse_time_str(self, time_str: str, fallback: dtime) -> dtime:
+        """解析 HH:MM 字符串为 time 对象，失败时返回 fallback。"""
+        try:
+            if isinstance(time_str, str):
+                parts = time_str.split(":")
+                h = int(parts[0])
+                m = int(parts[1]) if len(parts) > 1 else 0
+                if 0 <= h < 24 and 0 <= m < 60:
+                    return dtime(h, m)
+        except Exception as e:
+            logger.warning(f"[SowingDiscord][ID:{self.instance_id}] 冷却时间段解析失败: {time_str}, 使用默认值。错误: {e}")
+        return fallback
+
     def _get_banshi_interval_dynamic(self) -> int:
         """
         根据本地时间动态计算搬史间隔（可配置）：
-        - 09:00 - 01:00 => 返回配置中的白天冷却秒数（banshi_cooldown_day_seconds）
-        - 01:00 - 09:00 => 返回配置中的夜间冷却秒数（banshi_cooldown_night_seconds）
-        注意：时间段跨越午夜，采用半开区间 [01:00, 09:00) 为夜间冷却，其余为白天冷却。
+        - [day_start, 24:00) ∪ [00:00, night_start) => 返回白天冷却秒数
+        - [night_start, day_start) => 返回夜间冷却秒数
+        注意：时间段跨越午夜。
         """
         now = datetime.now().time()
-        if now >= dtime(9, 0) or now < dtime(1, 0):
+        if now >= self._day_start or now < self._night_start:
             return self.cooldown_day_seconds
         return self.cooldown_night_seconds
 
@@ -98,6 +117,8 @@ class Sowing_Discord(Star):
         
         try:
             current_task = asyncio.current_task()
+            # 记录当前任务以便 terminate 时可取消（无论是否正处于冷却中）
+            self._forward_task = current_task
             cleaned_count = await self.local_cache._cleanup_expired_cache()
             if cleaned_count > 0:
                 logger.info(f"[SowingDiscord][ID:{self.instance_id}] 转发前自动清理了 {cleaned_count} 条超出最大缓存时长的消息。")
