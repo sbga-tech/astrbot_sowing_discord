@@ -12,6 +12,7 @@ from .storage.local_cache import LocalCache
 import asyncio
 import time
 import uuid 
+from datetime import datetime, time as dtime
 
 @register("astrbot_sowing_discord", "anka", "anka - 搬史插件", "0.915")
 class Sowing_Discord(Star):
@@ -19,6 +20,7 @@ class Sowing_Discord(Star):
         super().__init__(context)
         self.instance_id = str(uuid.uuid4())[:8] 
         
+        # 仍然读取配置中的 banshi_interval 以保持兼容，但实际冷却时将按时间段动态计算
         self.banshi_interval = config.get("banshi_interval", 3600) 
         self.banshi_cache_seconds = config.get("banshi_cache_seconds", 3600) 
         
@@ -30,21 +32,18 @@ class Sowing_Discord(Star):
         self.forward_lock = asyncio.Lock()
         self._forward_task = None 
 
-    async def terminate(self):
-        if self._forward_task and not self._forward_task.done():
-            logger.warning(f"[SowingDiscord][ID:{self.instance_id}] 检测到正在冷却中的转发任务，正在尝试取消...")
-            self._forward_task.cancel()
-            try:
-                await asyncio.wait_for(self._forward_task, timeout=5.0) 
-            except asyncio.TimeoutError:
-                logger.error(f"[SowingDiscord][ID:{self.instance_id}] 冷却任务取消超时。由于未使用全局锁，这不会阻塞其他实例。")
-            except asyncio.CancelledError:
-                logger.info(f"[SowingDiscord][ID:{self.instance_id}] 冷却任务已成功取消。")
-            except Exception as e:
-                logger.error(f"[SowingDiscord][ID:{self.instance_id}] 取消冷却任务时发生异常: {e}")
+    def _get_banshi_interval_dynamic(self) -> int:
+        """
+        根据本地时间动态计算搬史间隔：
+        - 09:00 - 01:00 => 600s
+        - 01:00 - 09:00 => 3600s
+        注意：时间段跨越午夜，采用半开区间 [01:00, 09:00) 为 3600s，其余为 600s。
+        """
+        now = datetime.now().time()
+        if now >= dtime(9, 0) or now < dtime(1, 0):
+            return 600
+        return 3600
 
-        logger.info(f"[SowingDiscord][ID:{self.instance_id}] 插件已卸载/重载。")
-        
     @filter.platform_adapter_type(PlatformAdapterType.AIOCQHTTP)
     async def handle_message(self, event:AstrMessageEvent):
         forward_manager = ForwardManager(event)
@@ -160,9 +159,11 @@ class Sowing_Discord(Star):
                             await self.local_cache.remove_cache(msg_id_to_forward)
                             logger.info(f"[SowingDiscord][ID:{self.instance_id}] 缓存清理：消息 (ID: {msg_id_to_forward}) 转发成功，已手动清除缓存。")
 
+                            # 冷却：根据时间段动态设置间隔
+                            interval = self._get_banshi_interval_dynamic()
                             self._forward_task = current_task 
-                            logger.info(f"[SowingDiscord][ID:{self.instance_id}] 冷却开始：时长 {self.banshi_interval} 秒 (持有锁)。")
-                            await asyncio.sleep(self.banshi_interval)
+                            logger.info(f"[SowingDiscord][ID:{self.instance_id}] 冷却开始：时长 {interval} 秒 (持有锁)。")
+                            await asyncio.sleep(interval)
                             self._forward_task = None # 冷却完成后清除跟踪
                             
                             end_time = time.time()
