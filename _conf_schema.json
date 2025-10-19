@@ -9,6 +9,16 @@
     "default": 3600,
     "description": "消息缓存时间限制, 也是转发前检查历史消息的时间窗口 (秒)"
   },
+  "banshi_cooldown_day_seconds": {
+    "type": "int",
+    "default": 600,
+    "description": "动态冷却：白天(09:00-01:00) 冷却秒数"
+  },
+  "banshi_cooldown_night_seconds": {
+    "type": "int",
+    "default": 3600,
+    "description": "动态冷却：夜间(01:00-09:00) 冷却秒数"
+  },
   "banshi_group_list": {
     "type": "list",
     "default": ["1032915502"],

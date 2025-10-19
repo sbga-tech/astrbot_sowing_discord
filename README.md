@@ -70,7 +70,10 @@ https://ankaanka.me/sowing_discord_center/
 
 插件配置项包括：
 
-- `banshi_interval`: 搬史间隔, 单位: 秒
+- `banshi_interval`: 搬史间隔, 单位: 秒（兼容项，实际冷却由时间段动态决定）
+- `banshi_cache_seconds`: 消息缓存时间限制, 也是转发前检查历史消息的时间窗口 (秒)
+- `banshi_cooldown_day_seconds`: 动态冷却-白天冷却秒数（09:00-01:00，默认 600）
+- `banshi_cooldown_night_seconds`: 动态冷却-夜间冷却秒数（01:00-09:00，默认 3600）
 - `banshi_group_list`: 史的来源群列表
 - `banshi_target_list`: 白名单, 史的目标列表, 可以填写多个群或用户, 默认空白即全部群
 - `block_source_messages`: 开启后将屏蔽 banshi_group_list 中的群消息

@@ -23,6 +23,9 @@ class Sowing_Discord(Star):
         # 仍然读取配置中的 banshi_interval 以保持兼容，但实际冷却时将按时间段动态计算
         self.banshi_interval = config.get("banshi_interval", 3600) 
         self.banshi_cache_seconds = config.get("banshi_cache_seconds", 3600) 
+        # 动态冷却配置（可自定义），默认：白天600s，夜间3600s
+        self.cooldown_day_seconds = config.get("banshi_cooldown_day_seconds", 600)
+        self.cooldown_night_seconds = config.get("banshi_cooldown_night_seconds", 3600)
         
         self.banshi_group_list = config.get("banshi_group_list")
         self.banshi_target_list = config.get("banshi_target_list")
@@ -34,15 +37,15 @@ class Sowing_Discord(Star):
 
     def _get_banshi_interval_dynamic(self) -> int:
         """
-        根据本地时间动态计算搬史间隔：
-        - 09:00 - 01:00 => 600s
-        - 01:00 - 09:00 => 3600s
-        注意：时间段跨越午夜，采用半开区间 [01:00, 09:00) 为 3600s，其余为 600s。
+        根据本地时间动态计算搬史间隔（可配置）：
+        - 09:00 - 01:00 => 返回配置中的白天冷却秒数（banshi_cooldown_day_seconds）
+        - 01:00 - 09:00 => 返回配置中的夜间冷却秒数（banshi_cooldown_night_seconds）
+        注意：时间段跨越午夜，采用半开区间 [01:00, 09:00) 为夜间冷却，其余为白天冷却。
         """
         now = datetime.now().time()
         if now >= dtime(9, 0) or now < dtime(1, 0):
-            return 600
-        return 3600
+            return self.cooldown_day_seconds
+        return self.cooldown_night_seconds
 
     @filter.platform_adapter_type(PlatformAdapterType.AIOCQHTTP)
     async def handle_message(self, event:AstrMessageEvent):
@@ -191,6 +194,15 @@ class Sowing_Discord(Star):
         finally:
              self._forward_task = None 
 
+    def terminate(self):
+        """在插件停止时，取消仍在进行的冷却任务，避免阻塞关闭。"""
+        try:
+            if self._forward_task and not self._forward_task.done():
+                logger.info(f"[SowingDiscord][ID:{self.instance_id}] 插件终止：正在取消冷却任务。")
+                self._forward_task.cancel()
+        except Exception as e:
+            logger.error(f"[SowingDiscord][ID:{self.instance_id}] 终止时取消任务失败: {e}")
+    
     async def get_group_list(self, event: AstrMessageEvent):
         client = event.bot
         response = await client.api.call_action("get_group_list", {"no_cache": False})
