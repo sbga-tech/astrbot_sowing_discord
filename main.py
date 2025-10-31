@@ -83,13 +83,13 @@ class Sowing_Discord(Star):
             
         raw_message = event.message_obj.raw_message
         message_list = raw_message.get("message") if isinstance(raw_message, dict) else None
-        is_forward = (message_list is not None and 
+        is_shit = (message_list is not None and 
                     isinstance(message_list, list) and 
                     message_list and
                     isinstance(message_list[0], dict) and
-                    message_list[0].get("type") == "forward")
+                    message_list[0].get("type") in ["forward", "image"])
         
-        if is_forward and is_in_source_list:
+        if is_shit and is_in_source_list:
             await self.local_cache.add_cache(msg_id)
             logger.info(
                 f"[SowingDiscord][ID:{self.instance_id}] 任务：缓存。已缓存转发消息 (ID: {msg_id}, 源头群: {source_group_id}, 发送者: {sender_id})。"
@@ -168,7 +168,8 @@ class Sowing_Discord(Star):
                     # === 预检查通过，开始转发流程 ===
                     start_time_for_cooldown = time.time()
                     try:
-                        if await evaluator.evaluate(msg_id_to_forward):
+                        # if await evaluator.evaluate(msg_id_to_forward):
+                        if True:
                             logger.info(
                                 f"[SowingDiscord][ID:{self.instance_id}] 转发详情 (No.{index+1}, ID: {msg_id_to_forward})：目标群列表: [{target_list_str}]。"
                             )
